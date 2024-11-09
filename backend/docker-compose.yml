@@ -1,0 +1,45 @@
+services:
+  user-service:
+    build: ./user-service
+    ports:
+      - "8001:8001"
+    networks:
+      - backend-network
+
+  product-service:
+    build: ./product-service
+    ports:
+      - "8002:8002"
+    networks:
+      - backend-network
+
+  order-service:
+    build: ./order-service
+    ports:
+      - "8003:8003"
+    networks:
+      - backend-network
+
+  api-gateway:
+    build: ./api-gateway
+    ports:
+      - "8000:8000"
+    networks:
+      - backend-network
+
+  mongodb:
+    image: mongo:latest
+    ports:
+      - "27018:27017"
+    networks:
+      - backend-network
+    volumes:
+      - mongodb-data:/data/db
+
+networks:
+  backend-network:
+    driver: bridge
+
+volumes:
+  mongodb-data:
+    driver: local
