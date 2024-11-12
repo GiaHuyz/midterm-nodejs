@@ -1,60 +1,47 @@
-import amqp from "amqplib/callback_api.js"
+import amqp from "amqplib"
+import { v4 as uuidv4 } from "uuid"
 import Product from "../models/Product.js"
 
 const removeProduct = async (req, res) => {
 	const { id } = req.params
-	const uniqueReplyQueue = `order_check_reply_queue_${Date.now()}`
+	const correlationId = uuidv4()
 
 	try {
-		amqp.connect("amqp://rabbitmq", (error0, connection) => {
-			if (error0) {
-				res.status(500).json({ message: "Connection error" })
-				return
-			}
+		const connection = await amqp.connect("amqp://rabbitmq")
+		const channel = await connection.createChannel()
+		const requestQueue = "order_check_queue"
+		const replyQueue = await channel.assertQueue("", { exclusive: true })
 
-			connection.createChannel((error1, channel) => {
-				if (error1) {
-					res.status(500).json({ message: "Channel creation error" })
-					connection.close()
-					return
-				}
-
-				const queue = "order_check_queue"
-				channel.assertQueue(queue, { durable: false })
-				channel.assertQueue(uniqueReplyQueue, { durable: false })
-
-				channel.sendToQueue(queue, Buffer.from(JSON.stringify({ productId: id })), {
-					replyTo: uniqueReplyQueue,
-				})
-
-				channel.consume(
-					uniqueReplyQueue,
-					async (msg) => {
-						if (msg !== null) {
-							const response = JSON.parse(msg.content.toString())
-                            console.log(response)
-
-							if (response.hasOrder) {
-								res.status(400).json({ message: "Cannot delete product with existing orders" })
-							} else {
-								const product = await Product.findByIdAndDelete(id)
-								if (!product) {
-									res.status(404).json({ message: "Product not found" })
-								} else {
-									res.status(200).json({ message: "Deleted successfully" })
-								}
-							}
-
-							channel.ack(msg)
-							channel.deleteQueue(uniqueReplyQueue)
-							channel.close()
-							connection.close()
-						}
-					},
-					{ noAck: false }
-				)
-			})
+		channel.sendToQueue(requestQueue, Buffer.from(JSON.stringify({ productId: id })), {
+			correlationId: correlationId,
+			replyTo: replyQueue.queue,
 		})
+
+		channel.consume(
+			replyQueue.queue,
+			async (msg) => {
+				if (msg !== null && msg.properties.correlationId === correlationId) {
+					const response = JSON.parse(msg.content.toString())
+
+					if (response.hasOrder) {
+						res.status(400).json({ message: "Cannot delete product with existing orders" })
+					} else {
+						const product = await Product.findByIdAndDelete(id)
+						if (!product) {
+							res.status(404).json({ message: "Product not found" })
+						} else {
+							res.status(200).json({ message: "Deleted successfully" })
+						}
+					}
+
+					channel.ack(msg)
+					await channel.deleteQueue(replyQueue.queue)
+					await channel.close()
+					await connection.close()
+				}
+			},
+			{ noAck: false }
+		)
 	} catch (error) {
 		res.status(500).json({ message: error.message })
 	}

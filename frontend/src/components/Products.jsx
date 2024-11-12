@@ -1,7 +1,7 @@
 import { ShoppingOutlined } from "@ant-design/icons"
 import { Button, Form, Input, InputNumber, Modal, Table, message } from "antd"
 import axios from "axios"
-import React, { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 
 const Products = () => {
 	const [products, setProducts] = useState([])
@@ -103,14 +103,16 @@ const Products = () => {
 					.catch((e) => message.error(e.response.data.message))
 			} else {
 				axios
-					.post("/api/products", values, {
+					.post("/api/products/", values, {
 						headers: {
 							Authorization: `Bearer ${localStorage.getItem("token")}`,
 						},
 					})
 					.then((response) => {
-						setProducts([...products, response.data])
-						message.success("Product added successfully")
+                        if(response.data) {
+                            setProducts([...products, response.data])
+                            message.success("Product added successfully")
+                        }
 					})
 					.catch((e) => message.error(e.response.data.message))
 			}

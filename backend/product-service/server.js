@@ -33,10 +33,10 @@ app.use((req, res, next) => {
 
 app.use(authenticateToken)
 
-app.get("/", getProducts)
 app.post("/", createProduct)
 app.put("/:id", updateProduct)
 app.delete("/:id", removeProduct)
+app.get("/", getProducts)
 
 const PORT = process.env.PORT
 app.listen(PORT, () => {

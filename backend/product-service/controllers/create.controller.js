@@ -2,6 +2,7 @@ import Product from "../models/Product.js"
 
 const createProduct = async (req, res) => {
     const { name, price, stock } = req.body
+    console.log(req.body)
 
     if(!name || !price || !stock) return res.status(400).json({ message: "All fields are required" })
 

@@ -136,7 +136,7 @@ const Orders = () => {
 					}
 					setOrders([...orders, newOrder])
 					message.success("Order created successfully")
-					await fetchOrders() // Call fetchOrders after adding a new order
+					await fetchOrders()
 				} catch (error) {
 					message.error(error.response.data.message)
 				}

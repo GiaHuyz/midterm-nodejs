@@ -1,36 +1,46 @@
-import amqp from "amqplib/callback_api.js"
+import amqp from "amqplib"
 import Order from "../models/Order.js"
 
-const handleOrderCheckQueue = () => {
-	amqp.connect("amqp://rabbitmq", (error0, connection) => {
-		if (error0) throw error0
+const handleOrderCheckQueue = async () => {
+	try {
+		const connection = await amqp.connect("amqp://rabbitmq")
+		const channel = await connection.createChannel()
 
-		connection.createChannel((error1, channel) => {
-			if (error1) throw error1
+		const queue = "order_check_queue"
+		await channel.assertQueue(queue, { durable: false })
 
-			const queue = "order_check_queue"
-			channel.assertQueue(queue, { durable: false })
-
-			channel.consume(
-				queue,
-				async (msg) => {
-					if (msg !== null) {
+		channel.consume(
+			queue,
+			async (msg) => {
+				if (msg !== null) {
+					try {
 						const { productId } = JSON.parse(msg.content.toString())
+
 						const orders = await Order.find({ products: { $elemMatch: { _id: productId } } }).exec()
-						console.log(orders)
 						const response = { hasOrder: orders.length > 0 }
 
-						if (msg.properties.replyTo) {
-							channel.assertQueue(msg.properties.replyTo, { durable: false })
-							channel.sendToQueue(msg.properties.replyTo, Buffer.from(JSON.stringify(response)))
-							channel.ack(msg)
+						if (msg.properties.replyTo && msg.properties.correlationId) {
+							channel.sendToQueue(msg.properties.replyTo, Buffer.from(JSON.stringify(response)), {
+								correlationId: msg.properties.correlationId,
+							})
 						}
+
+						channel.ack(msg)
+					} catch (error) {
+						console.error("Error processing message:", error)
 					}
-				},
-				{ noAck: false }
-			)
+				}
+			},
+			{ noAck: false }
+		)
+
+		process.on("exit", () => {
+			connection.close()
+			console.log("Connection closed")
 		})
-	})
+	} catch (error) {
+		console.error("Error connecting to RabbitMQ:", error)
+	}
 }
 
 export { handleOrderCheckQueue }

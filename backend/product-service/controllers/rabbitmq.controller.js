@@ -1,45 +1,38 @@
-import amqp from "amqplib/callback_api.js"
+import amqp from "amqplib"
 import Product from "../models/Product.js"
 
-const handleProductQueue = () => {
-	amqp.connect("amqp://rabbitmq", (error0, connection) => {
-		if (error0) throw error0
+const handleProductQueue = async () => {
+	const connection = await amqp.connect("amqp://rabbitmq")
+	const channel = await connection.createChannel()
+	const queue = "product_queue"
 
-		connection.createChannel((error1, channel) => {
-			if (error1) throw error1
+	await channel.assertQueue(queue, { durable: false })
 
-			const queue = "product_queue"
-			channel.assertQueue(queue, { durable: false })
+	channel.consume(queue, async (msg) => {
+		const productMessage = JSON.parse(msg.content.toString())
 
-			channel.consume(queue, async (msg) => {
-				if (msg !== null) {
-					const productId = msg.content.toString()
+		try {
+			const product = await Product.findById(productMessage.productId).exec()
 
-					try {
-						const product = await Product.findById(productId).exec()
-
-						if (msg.properties.replyTo) {
-							if (!product) {
-								channel.sendToQueue(
-									msg.properties.replyTo,
-									Buffer.from(
-										JSON.stringify({
-											error: "Product not found",
-											productId,
-										})
-									)
-								)
-							} else {
-								channel.sendToQueue(msg.properties.replyTo, Buffer.from(JSON.stringify(product)))
-							}
-						}
-					} catch (error) {
-						console.error("Error fetching product:", error)
-					}
-					channel.ack(msg)
+			if (msg.properties.replyTo) {
+				if (!product) {
+					channel.sendToQueue(
+						msg.properties.replyTo,
+						Buffer.from(JSON.stringify({ status: 404, productId: productMessage.productId })),
+						{ correlationId: msg.properties.correlationId }
+					)
+				} else {
+					channel.sendToQueue(msg.properties.replyTo, Buffer.from(JSON.stringify(product)), {
+						correlationId: msg.properties.correlationId,
+					})
+					await Product.findByIdAndUpdate(productMessage.productId, { $inc: { stock: -productMessage.quantity } })
 				}
-			})
-		})
+			}
+		} catch (error) {
+			console.error("Error fetching product:", error)
+		}
+
+		channel.ack(msg)
 	})
 }
 
