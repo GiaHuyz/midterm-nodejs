@@ -8,7 +8,7 @@ import Products from "./components/Products"
 import Register from "./components/Register"
 import Users from "./components/Users"
 
-const { Header, Content, Footer } = Layout
+const { Header, Content } = Layout
 
 const App = () => {
 	const [isAuthenticated, setIsAuthenticated] = useState(true)

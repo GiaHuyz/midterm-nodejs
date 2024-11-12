@@ -1,31 +1,43 @@
 services:
-  user-service:
-    build: ./user-service
+  nginx:
+    build:
+      context: ./frontend
     ports:
-      - "8001:8001"
+      - "80:80"
     networks:
       - backend-network
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+    restart: always
+
+  user-service:
+    build: ./backend/user-service
+    networks:
+      - backend-network
+    deploy:
+      replicas: 2
 
   product-service:
-    build: ./product-service
-    ports:
-      - "8002:8002"
+    build: ./backend/product-service
     networks:
       - backend-network
+    deploy:
+      replicas: 2
+    depends_on:
+      - rabbitmq
+    restart: always
 
   order-service:
-    build: ./order-service
-    ports:
-      - "8003:8003"
+    build: ./backend/order-service
     networks:
       - backend-network
-
-  api-gateway:
-    build: ./api-gateway
-    ports:
-      - "8000:8000"
-    networks:
-      - backend-network
+    deploy:
+      replicas: 2
+    depends_on:
+      - rabbitmq
+    restart: always
 
   mongodb:
     image: mongo:latest
